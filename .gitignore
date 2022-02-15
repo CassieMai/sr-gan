@@ -187,3 +187,7 @@ Temporary Items
 /imdb_wiki_data/
 /venv/
 /archived_results/
+
+*.pth
+*tfevents*
+*.out

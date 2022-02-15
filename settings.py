@@ -13,14 +13,14 @@ class Settings:
     """Represents the settings for a given run of SRGAN."""
     def __init__(self):
         self.trial_name = 'base'
-        self.steps_to_run = 200000
+        self.steps_to_run = 5  # ==========
         self.temporary_directory = 'temporary'
         self.logs_directory = 'logs'
-        self.batch_size = 1000
-        self.summary_step_period = 2000
-        self.labeled_dataset_size = 50
-        self.unlabeled_dataset_size = 50000
-        self.validation_dataset_size = 1000
+        self.batch_size = 2   # 1000
+        self.summary_step_period = 200   # ==========
+        self.labeled_dataset_size = 2
+        self.unlabeled_dataset_size = 2
+        self.validation_dataset_size = 2
         self.learning_rate = 1e-4
         self.weight_decay = 0
 
@@ -42,9 +42,9 @@ class Settings:
 
         self.load_model_path = None
         self.should_save_models = True
-        self.skip_completed_experiment = True
-        self.number_of_data_workers = 4
-        self.pin_memory = True
+        self.skip_completed_experiment = False  #True
+        self.number_of_data_workers = 2
+        self.pin_memory = False # True
         self.continue_from_previous_trial = False
         self.continue_existing_experiments = False
         self.save_step_period = None

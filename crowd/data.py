@@ -16,6 +16,7 @@ class CrowdDataset(Enum):
     ucf_qnrf = 'UCF QNRF'
     shanghai_tech = 'ShanghaiTech'
     world_expo = 'World Expo'
+    clustered_orange = 'ClusteredOrange'
 
 
 class CrowdExample:

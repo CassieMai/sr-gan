@@ -6,6 +6,7 @@ import os
 import random
 from collections import defaultdict
 
+import PIL.Image
 import imageio
 import scipy.misc
 import matplotlib
@@ -21,9 +22,10 @@ from crowd.models import DCGenerator, KnnDenseNetCat
 from crowd.shanghai_tech_data import ShanghaiTechFullImageDataset, ShanghaiTechTransformedDataset
 from crowd.ucf_qnrf_data import UcfQnrfFullImageDataset, UcfQnrfTransformedDataset
 from crowd.world_expo_data import WorldExpoFullImageDataset, WorldExpoTransformedDataset
+from crowd.clustered_orange_data import ClusteredOrangeFullImageDataset, ClusteredOrangeTransformedDataset
 from srgan import Experiment
 from utility import MixtureModel, gpu
-
+import PIL.Image as Image
 
 class CrowdExperiment(Experiment):
     """The crowd application."""
@@ -89,6 +91,27 @@ class CrowdExperiment(Experiment):
             if self.settings.batch_size > self.train_dataset.length:
                 self.settings.batch_size = self.train_dataset.length
 
+        elif settings.crowd_dataset == CrowdDataset.clustered_orange:
+            print('crowd dataset: clustered_orange')
+            self.dataset_class = ClusteredOrangeFullImageDataset
+            self.train_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(),
+                                                           seed=settings.labeled_dataset_seed,
+                                                           number_of_examples=settings.labeled_dataset_size,
+                                                           map_directory_name=settings.map_directory_name)
+            self.train_dataset_loader = DataLoader(self.train_dataset, batch_size=settings.batch_size,
+                                                   pin_memory=self.settings.pin_memory,
+                                                   num_workers=settings.number_of_data_workers)
+            self.unlabeled_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(),
+                                                               seed=settings.labeled_dataset_seed,
+                                                               number_of_examples=settings.unlabeled_dataset_size,
+                                                               map_directory_name=settings.map_directory_name,
+                                                               examples_start=settings.labeled_dataset_size)
+            self.unlabeled_dataset_loader = DataLoader(self.unlabeled_dataset, batch_size=settings.batch_size,
+                                                       pin_memory=self.settings.pin_memory,
+                                                       num_workers=settings.number_of_data_workers)
+            self.validation_dataset = ClusteredOrangeTransformedDataset(dataset='test', seed=101,
+                                                                map_directory_name=settings.map_directory_name)
+
     def model_setup(self):
         """Prepares all the model architectures required for the application."""
         self.G = DCGenerator()
@@ -116,6 +139,7 @@ class CrowdExperiment(Experiment):
         # GAN validation evaluation.
         self.evaluation_epoch(settings, D, validation_dataset, gan_summary_writer, '1 Validation Error',
                               comparison_value=dnn_validation_count_mae, shuffle=False)
+
         # Real images.
         train_iterator = iter(DataLoader(train_dataset, batch_size=settings.batch_size))
         images, densities, maps = next(train_iterator)
@@ -133,6 +157,7 @@ class CrowdExperiment(Experiment):
         dnn_predicted_densities, _, predicted_maps = DNN(images.to(gpu))
         dnn_validation_comparison_image = self.create_map_comparison_image(images, maps, predicted_maps.to('cpu'))
         dnn_summary_writer.add_image('Validation', dnn_validation_comparison_image)
+
         # Generated images.
         z = torch.randn(settings.batch_size, G.input_size)
         fake_examples = G(z.to(gpu)).to('cpu')
@@ -145,6 +170,7 @@ class CrowdExperiment(Experiment):
         gan_summary_writer.add_image('Fake/Offset', fake_images_image.numpy())
 
         self.test_summaries()
+
 
     def evaluation_epoch(self, settings, network, dataset, summary_writer, summary_name, comparison_value=None,
                          shuffle=True):
@@ -207,11 +233,12 @@ class CrowdExperiment(Experiment):
         mappable.set_clim(vmin=min(label_array.min(), predicted_label_array.min()),
                           vmax=max(label_array.max(), predicted_label_array.max()))
         patch_size = self.settings.image_patch_size
-        resized_label_array = scipy.misc.imresize(label_array, (patch_size, patch_size), mode='F')
+        # resized_label_array = scipy.misc.imresize(label_array, (patch_size, patch_size), mode='F')
+        resized_label_array = np.array(Image.fromarray(label_array).resize((patch_size, patch_size), PIL.Image.BICUBIC))  # xcmai
         label_heatmap_array = mappable.to_rgba(resized_label_array).astype(np.float32)
         label_heatmap_tensor = torch.as_tensor(label_heatmap_array[:, :, :3].transpose((2, 0, 1)))
-        resized_predicted_label_array = scipy.misc.imresize(predicted_label_array, (patch_size,
-                                                                                    patch_size), mode='F')
+        # resized_predicted_label_array = scipy.misc.imresize(predicted_label_array, (patch_size, patch_size), mode='F')
+        resized_predicted_label_array = np.array(Image.fromarray(predicted_label_array).resize((patch_size, patch_size), PIL.Image.BICUBIC))  # xcmai
         predicted_label_heatmap_array = mappable.to_rgba(resized_predicted_label_array).astype(np.float32)
         predicted_label_heatmap_tensor = torch.as_tensor(predicted_label_heatmap_array[:, :, :3].transpose((2, 0, 1)))
         return label_heatmap_tensor, predicted_label_heatmap_tensor
@@ -251,6 +278,7 @@ class CrowdExperiment(Experiment):
         predicted_density_labels, predicted_count_labels, predicted_maps = predicted_labels
         map_loss = (torch.abs(predicted_maps - maps)).mean(1).sum(1).sum(1).pow(order).mean()
         count_loss = torch.abs(predicted_count_labels - head_labels.sum(1).sum(1)).pow(order).mean()
+        # count_loss = torch.abs(predicted_count_labels - map_labels.sum(1).sum(1)).pow(order).mean()  # xcmai
         return count_loss + (map_loss * self.settings.map_multiplier)
 
     def images_to_predicted_labels(self, network, images):
@@ -260,6 +288,7 @@ class CrowdExperiment(Experiment):
 
     def test_summaries(self):
         """Evaluates the model on test data during training."""
+        print('in test_summaries')
         test_dataset = self.dataset_class(dataset='test', map_directory_name=self.settings.map_directory_name)
         if self.settings.test_summary_size is not None:
             indexes = random.sample(range(test_dataset.length), self.settings.test_summary_size)
@@ -274,7 +303,7 @@ class CrowdExperiment(Experiment):
                 full_example = CrowdExample(image=full_image, label=full_label)
                 full_predicted_count, full_predicted_label = self.predict_full_example(full_example, network)
                 totals['Count error'] += np.abs(full_predicted_count - full_example.label.sum())
-                totals['NAE'] += np.abs(full_predicted_count - full_example.label.sum()) / full_example.label.sum()
+                totals['NAE'] += np.abs(full_predicted_count - full_example.label.sum()) / (full_example.label.sum() + 1e-10)
                 totals['Density sum error'] += np.abs(full_predicted_label.sum() - full_example.label.sum())
                 totals['SE count'] += (full_predicted_count - full_example.label.sum()) ** 2
                 totals['SE density'] += (full_predicted_label.sum() - full_example.label.sum()) ** 2
@@ -292,12 +321,15 @@ class CrowdExperiment(Experiment):
             summary_writer.add_scalar('0 Test Error/RMSE count', rmse_count)
             rmse_density = (totals['SE density'] / len(indexes)) ** 0.5
             summary_writer.add_scalar('0 Test Error/RMSE density', rmse_density)
+
             if network is self.DNN:
                 dnn_mae_count = mae_count
                 dnn_rmse_count = rmse_count
             else:
                 summary_writer.add_scalar('0 Test Error/Ratio MAE GAN DNN', mae_count / dnn_mae_count)
                 summary_writer.add_scalar('0 Test Error/Ratio RMSE GAN DNN', rmse_count / dnn_rmse_count)
+            print('totals', totals)
+        print('test_summaries end')
 
     def evaluate(self, during_training=False, step=None, number_of_examples=None):
         """Evaluates the model on test data."""
@@ -361,7 +393,9 @@ class CrowdExperiment(Experiment):
                     predicted_count = predicted_counts[example_index].detach().numpy()
                 except IndexError:
                     predicted_count = predicted_counts.detach().numpy()
-                predicted_label = scipy.misc.imresize(predicted_label, (patch_size, patch_size), mode='F')
+                # predicted_label = scipy.misc.imresize(predicted_label, (patch_size, patch_size), mode='F')
+                predicted_label = np.array(Image.fromarray(predicted_label).resize((patch_size, patch_size), PIL.Image.BICUBIC))  # xcmai
+
                 predicted_label = predicted_label
                 predicted_count_array = np.full(predicted_label.shape,
                                                 predicted_count / predicted_label.size)

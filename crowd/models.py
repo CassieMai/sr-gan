@@ -987,7 +987,9 @@ class KnnDenseNetCatDggan(nn.Module):
             # to find such keys.
             pattern = re.compile(
                 r'^(.*denselayer\d+\.(?:norm|relu|conv))\.((?:[12])\.(?:weight|bias|running_mean|running_var))$')
-            state_dict = model_zoo.load_url(torchvision.models.densenet.model_urls['densenet201'])
+            # state_dict = model_zoo.load_url(torchvision.models.densenet.model_urls['densenet201'])
+            state_dict = torch.load('../pretrainedmodels/densenet201-c1103571.pth')
+
             for key in list(state_dict.keys()):
                 res = pattern.match(key)
                 if res:
@@ -1043,6 +1045,7 @@ class KnnDenseNetCatDggan(nn.Module):
         self.real_label = real_label
         map_ = torch.cat([map1, map2, map3], dim=1)
         map_ = map_.view(batch_size, 3, self.label_patch_size, self.label_patch_size)
+        # print('KnnDenseNetCatDggan count', count.item())
         return density, count, map_
 
 
@@ -1107,7 +1110,8 @@ class KnnDenseNetCat(nn.Module):
             # to find such keys.
             pattern = re.compile(
                 r'^(.*denselayer\d+\.(?:norm|relu|conv))\.((?:[12])\.(?:weight|bias|running_mean|running_var))$')
-            state_dict = model_zoo.load_url(torchvision.models.densenet.model_urls['densenet201'])
+            # state_dict = model_zoo.load_url(torchvision.models.densenet.model_urls['densenet201'])
+            state_dict = torch.load('../pretrainedmodels/densenet201-c1103571.pth')
             for key in list(state_dict.keys()):
                 res = pattern.match(key)
                 if res:

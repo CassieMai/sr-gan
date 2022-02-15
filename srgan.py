@@ -67,6 +67,7 @@ class Experiment(ABC):
                 self.settings.load_model_path = self.trial_directory
             elif not os.path.exists(self.trial_directory):
                 self.settings.continue_existing_experiments = False
+        self.trial_directory = '092801'
         print(self.trial_directory)
         os.makedirs(os.path.join(self.trial_directory, self.settings.temporary_directory), exist_ok=True)
         self.prepare_summary_writers()
@@ -102,6 +103,7 @@ class Experiment(ABC):
         unlabeled_dataset_generator = self.infinite_iter(self.unlabeled_dataset_loader)
         step_time_start = datetime.datetime.now()
         for step in range(self.starting_step, self.settings.steps_to_run):
+            print('step=', step)
             self.adjust_learning_rate(step)
             # DNN.
             samples = next(train_dataset_generator)
@@ -112,10 +114,13 @@ class Experiment(ABC):
                 labeled_examples, primary_labels, secondary_labels = samples
                 labeled_examples, labels = labeled_examples.to(gpu), (primary_labels.to(gpu), secondary_labels.to(gpu))
             self.dnn_training_step(labeled_examples, labels, step)
+            print('dnn_training_step')
+
             # GAN.
             unlabeled_examples = next(unlabeled_dataset_generator)[0]
             unlabeled_examples = unlabeled_examples.to(gpu)
             self.gan_training_step(labeled_examples, labels, unlabeled_examples, step)
+            print('gan_training_step')
 
             if self.gan_summary_writer.is_summary_step() or step == self.settings.steps_to_run - 1:
                 print('\rStep {}, {}...'.format(step, datetime.datetime.now() - step_time_start), end='')
@@ -124,9 +129,13 @@ class Experiment(ABC):
                 with torch.no_grad():
                     self.validation_summaries(step)
                 self.train_mode()
-            self.handle_user_input(step)
+
+            # self.handle_user_input(step)
+
             if self.settings.save_step_period and step % self.settings.save_step_period == 0 and step != 0:
                 self.save_models(step=step)
+        print('step end')
+
 
     def prepare_optimizers(self):
         """Prepares the optimizers of the network."""
@@ -153,14 +162,17 @@ class Experiment(ABC):
         :param step: The current step of the program.
         :type step: int
         """
+        print('in handle_user_input')
         while sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
             line = sys.stdin.readline()
+            print('line', line)
             if 'save' in line:
                 self.save_models(step)
                 print('\rSaved model for step {}...'.format(step))
             if 'quit' in line:
                 self.signal_quit = True
                 print('\rQuit requested after current experiment...')
+            break
 
     def train_mode(self):
         """
@@ -261,6 +273,7 @@ class Experiment(ABC):
         self.DNN.apply(disable_batch_norm_updates)  # No batch norm
         self.dnn_summary_writer.step = step
         self.dnn_optimizer.zero_grad()
+
         dnn_loss = self.dnn_loss_calculation(examples, labels)
         dnn_loss.backward()
         self.dnn_optimizer.step()
@@ -276,12 +289,16 @@ class Experiment(ABC):
         self.D.apply(disable_batch_norm_updates)  # No batch norm
         self.gan_summary_writer.step = step
         self.d_optimizer.zero_grad()
+
         labeled_loss = self.labeled_loss_calculation(labeled_examples, labels)
         labeled_loss.backward()
+
         # Unlabeled.
         # self.D.apply(disable_batch_norm_updates)  # Make sure only labeled data is used for batch norm statistics
         unlabeled_loss = self.unlabeled_loss_calculation(labeled_examples, unlabeled_examples)
         unlabeled_loss.backward()
+        print('unlabeled_loss', unlabeled_loss.item())
+
         # Fake.
         z = torch.tensor(MixtureModel([norm(-self.settings.mean_offset, 1),
                                        norm(self.settings.mean_offset, 1)]
@@ -290,11 +307,14 @@ class Experiment(ABC):
         fake_examples = self.G(z)
         fake_loss = self.fake_loss_calculation(unlabeled_examples, fake_examples)
         fake_loss.backward()
+        print('fake_loss', fake_loss.item())
+
         # Gradient penalty.
         gradient_penalty = self.gradient_penalty_calculation(fake_examples, unlabeled_examples)
         gradient_penalty.backward()
         # Discriminator update.
         self.d_optimizer.step()
+
         # Generator.
         if step % self.settings.generator_training_step_period == 0:
             self.g_optimizer.zero_grad()
@@ -305,6 +325,8 @@ class Experiment(ABC):
             self.g_optimizer.step()
             if self.gan_summary_writer.is_summary_step():
                 self.gan_summary_writer.add_scalar('Generator/Loss', generator_loss.item())
+            print('generator_loss', generator_loss.item())
+
         # Summaries.
         if self.gan_summary_writer.is_summary_step():
             self.gan_summary_writer.add_scalar('Discriminator/Labeled Loss', labeled_loss.item())
@@ -324,6 +346,7 @@ class Experiment(ABC):
         predicted_labels = self.DNN(labeled_examples)
         labeled_loss = self.labeled_loss_function(predicted_labels, labels, order=self.settings.labeled_loss_order)
         labeled_loss *= self.settings.labeled_loss_multiplier
+        print('labeled_loss', labeled_loss.item())
         return labeled_loss
 
     def labeled_loss_calculation(self, labeled_examples, labels):

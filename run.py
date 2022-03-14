@@ -61,22 +61,22 @@ elif application_name == ApplicationName.crowd:
     settings_.number_of_images_per_camera = [5]
     settings_.crowd_dataset = CrowdDataset.clustered_orange
     settings_.labeled_loss_order = 2
-    settings_.unlabeled_dataset_size = 1800  # =========
-    settings_.labeled_dataset_size = 1200  # =========
+    settings_.unlabeled_dataset_size = 6 #6  #1800  # =========
+    settings_.labeled_dataset_size = 4 #4  #1200  # =========
     settings_.gradient_penalty_multiplier = 1e2
     settings_.map_directory_name = ['_den']
     settings_.map_multiplier = 1e-3
 else:
     raise ValueError(f'{application_name} is not an available application.')
-settings_.summary_step_period = 1500  # ========
+settings_.summary_step_period = 1  #15000  # ========
 settings_.labeled_dataset_seed = 0
-settings_.steps_to_run = 300000    # ========  len(train_dataloader)/batch_size
+settings_.steps_to_run = 37500 # 37500 #150000    # ========  len(train_dataloader)/batch_size
 settings_.learning_rate = [1e-4]
 # settings.load_model_path = 'logs/k comparison i1nn_maps ShanghaiTech crowd dnn ul1e3 fl1e2 gp1e2 lr1e-4 mm1e-6 ls0 bs40'
 settings_.contrasting_distance_function = abs_plus_one_sqrt_mean_neg
 settings_.matching_distance_function = abs_mean
 settings_.continue_existing_experiments = False
-settings_.save_step_period = 15000
+settings_.save_step_period = 1500  #15000 ========
 settings_.local_setup()
 settings_list = convert_to_settings_list(settings_, shuffle=True)
 print('settings_list', settings_list)
@@ -109,6 +109,8 @@ for settings_ in settings_list:
     experiment = Experiment(settings_)
     print('trial_name', trial_name)
     experiment.train()
+    print('training finished ......')
     previous_trial_directory = experiment.trial_directory
+    # experiment.evaluate(step=settings_.steps_to_run)  # xcmai
     if experiment.signal_quit:
         break

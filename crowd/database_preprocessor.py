@@ -25,7 +25,9 @@ class DatabasePreprocessor(ABC):
         if os.path.basename(os.path.normpath(os.path.abspath('..'))) == 'srgan':
             return '../../{}'.format(self.database_name)
         else:
-            return '../{}'.format(self.database_name)
+            # return '../{}'.format(self.database_name)
+            return self.database_name
+
 
     def download_and_preprocess(self):
         """Both download and preprocess the dataset."""

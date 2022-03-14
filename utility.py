@@ -243,6 +243,50 @@ def square_mean(tensor):
     return tensor.pow(2).mean()
 
 
+import matplotlib.pyplot as plt
+import cv2
+import PIL.Image as Image
+def visualize(imrgb=None, density=None, expid='debug'):
+    """ save input imrgb, gt, ouput_density, output_ema_density, gt_ab, output_ab, output_ema_ab.
+    inp is a dict. """
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), tight_layout=True,  constrained_layout=True)  # 
+    plt.subplots_adjust(wspace=0.001)
+    axes[0].imshow((imrgb).astype('uint8'))
+    axes[0].axis('off')
+    axes[0].set_title('imrgb', fontsize=8)
+
+    axes[1].imshow(density, cmap='jet')
+    axes[1].axis('off')
+    axes[1].set_title('gt density', fontsize=8)
+
+    # print('imgname ', name)
+    fig.savefig(expid + '.png', facecolor='white', edgecolor='red')
+    plt.close()
+
+def visualize2(imrgb=None, density=None, pred_density=None, expid='debug'):
+    """ save input imrgb, gt, ouput_density, output_ema_density, gt_ab, output_ab, output_ema_ab.
+    inp is a dict. """
+
+    fig, axes = plt.subplots(1, 3, figsize=(10, 4), tight_layout=True,  constrained_layout=True)  # 
+    plt.subplots_adjust(wspace=0.001)
+    axes[0].imshow((imrgb).astype('uint8'))
+    axes[0].axis('off')
+    axes[0].set_title('imrgb', fontsize=8)
+
+    axes[1].imshow(density, cmap='jet')
+    axes[1].axis('off')
+    axes[1].set_title('gt density', fontsize=8)
+
+    axes[2].imshow(pred_density, cmap='jet')
+    axes[2].axis('off')
+    axes[2].set_title('pred. density', fontsize=8) 
+
+    # print('imgname ', name)
+    fig.savefig(expid + 'test.png', facecolor='white', edgecolor='red')
+    plt.close()
+
+
 if __name__ == '__main__':
     import seaborn as sns
     sns.set_style('dark')

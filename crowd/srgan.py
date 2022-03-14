@@ -26,6 +26,7 @@ from crowd.clustered_orange_data import ClusteredOrangeFullImageDataset, Cluster
 from srgan import Experiment
 from utility import MixtureModel, gpu
 import PIL.Image as Image
+import time
 
 class CrowdExperiment(Experiment):
     """The crowd application."""
@@ -94,23 +95,19 @@ class CrowdExperiment(Experiment):
         elif settings.crowd_dataset == CrowdDataset.clustered_orange:
             print('crowd dataset: clustered_orange')
             self.dataset_class = ClusteredOrangeFullImageDataset
-            self.train_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(),
-                                                           seed=settings.labeled_dataset_seed,
-                                                           number_of_examples=settings.labeled_dataset_size,
-                                                           map_directory_name=settings.map_directory_name)
+            self.train_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(), seed=settings.labeled_dataset_seed, number_of_examples=settings.labeled_dataset_size, map_directory_name=settings.map_directory_name)
+            # self.train_dataset = ClusteredOrangeFullImageDataset(dataset='train', seed=settings.labeled_dataset_seed, number_of_examples=settings.labeled_dataset_size, map_directory_name=settings.map_directory_name)
             self.train_dataset_loader = DataLoader(self.train_dataset, batch_size=settings.batch_size,
                                                    pin_memory=self.settings.pin_memory,
                                                    num_workers=settings.number_of_data_workers)
-            self.unlabeled_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(),
-                                                               seed=settings.labeled_dataset_seed,
-                                                               number_of_examples=settings.unlabeled_dataset_size,
-                                                               map_directory_name=settings.map_directory_name,
-                                                               examples_start=settings.labeled_dataset_size)
+            self.unlabeled_dataset = ClusteredOrangeTransformedDataset(middle_transform=data.RandomHorizontalFlip(), seed=settings.labeled_dataset_seed, number_of_examples=settings.unlabeled_dataset_size, map_directory_name=settings.map_directory_name, examples_start=settings.labeled_dataset_size)
+            # self.unlabeled_dataset = ClusteredOrangeFullImageDataset(dataset='train', seed=settings.labeled_dataset_seed, number_of_examples=settings.unlabeled_dataset_size, map_directory_name=settings.map_directory_name, examples_start=settings.labeled_dataset_size)
             self.unlabeled_dataset_loader = DataLoader(self.unlabeled_dataset, batch_size=settings.batch_size,
                                                        pin_memory=self.settings.pin_memory,
                                                        num_workers=settings.number_of_data_workers)
             self.validation_dataset = ClusteredOrangeTransformedDataset(dataset='test', seed=101,
                                                                 map_directory_name=settings.map_directory_name)
+            # self.validation_dataset = ClusteredOrangeFullImageDataset(dataset='test', seed=101, map_directory_name=settings.map_directory_name)
 
     def model_setup(self):
         """Prepares all the model architectures required for the application."""
@@ -299,14 +296,19 @@ class CrowdExperiment(Experiment):
         for network in [self.DNN, self.D]:
             totals = defaultdict(lambda: 0)
             for index in indexes:
+                print('index', index)
                 full_image, full_label, full_maps = test_dataset[index]
                 full_example = CrowdExample(image=full_image, label=full_label)
+                sss = time.time()
                 full_predicted_count, full_predicted_label = self.predict_full_example(full_example, network)
+                print('predict_full_example running time ', time.time() - sss)
                 totals['Count error'] += np.abs(full_predicted_count - full_example.label.sum())
                 totals['NAE'] += np.abs(full_predicted_count - full_example.label.sum()) / (full_example.label.sum() + 1e-10)
                 totals['Density sum error'] += np.abs(full_predicted_label.sum() - full_example.label.sum())
                 totals['SE count'] += (full_predicted_count - full_example.label.sum()) ** 2
                 totals['SE density'] += (full_predicted_label.sum() - full_example.label.sum()) ** 2
+                totals['Pred. count sum'] += full_predicted_count  # xcmai
+                totals['GT count sum'] += full_example.label.sum()  # xcmai
             if network is self.DNN:
                 summary_writer = self.dnn_summary_writer
             else:
@@ -321,6 +323,15 @@ class CrowdExperiment(Experiment):
             summary_writer.add_scalar('0 Test Error/RMSE count', rmse_count)
             rmse_density = (totals['SE density'] / len(indexes)) ** 0.5
             summary_writer.add_scalar('0 Test Error/RMSE density', rmse_density)
+            rc_density = (totals['Pred. count sum'] / totals['GT count sum'])  # xcmai
+            summary_writer.add_scalar('0 Test Error/Ratio of counting', rc_density) # xcmai
+            print('len indexes', len(indexes))
+            print('nae_count', nae_count)
+            print('mae_count', mae_count)
+            print('mae_density', mae_density)
+            print('rmse_count', rmse_count)
+            print('rmse_density', rmse_density)
+            print('rc_density', rc_density)
 
             if network is self.DNN:
                 dnn_mae_count = mae_count
@@ -331,12 +342,18 @@ class CrowdExperiment(Experiment):
             print('totals', totals)
         print('test_summaries end')
 
+        # visualization. xcmai
+        from utility import visualize2
+        visualize2(full_image, full_label, full_predicted_label)
+
     def evaluate(self, during_training=False, step=None, number_of_examples=None):
         """Evaluates the model on test data."""
         super().evaluate()
         for network in [self.DNN, self.D]:
-            test_dataset = self.settings.dataset_class(dataset='test')
+            # test_dataset = self.settings.dataset_class(dataset='test')
+            test_dataset = self.dataset_class(dataset='test')
             totals = defaultdict(lambda: 0)
+            print('test_dataset', len(test_dataset))
             for full_example_index, (full_image, full_label) in enumerate(test_dataset):
                 print('Processing full example {}...'.format(full_example_index), end='\r')
                 full_example = CrowdExample(image=full_image, label=full_label)

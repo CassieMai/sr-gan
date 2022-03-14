@@ -15,6 +15,7 @@ from crowd.database_preprocessor import DatabasePreprocessor
 from utility import seed_all
 from PIL import Image
 import pandas as pd
+import cv2
 
 
 class ClusteredOrangeFullImageDataset(Dataset):
@@ -45,13 +46,24 @@ class ClusteredOrangeFullImageDataset(Dataset):
         :return: An example and label from the crowd dataset.
         :rtype: torch.Tensor, torch.Tensor
         """
+        scale = 0.6
         file_name = self.file_names[index]
         image = Image.open(os.path.join(self.dataset_directory, file_name[:-4] + '.jpg')).convert('RGB')
         image = np.array(image)
+        image = cv2.resize(image, (int(np.ceil(image.shape[1]*scale/8.0)*8), int(np.ceil(image.shape[0]*scale/8.0)*8)), interpolation=cv2.INTER_CUBIC)
+        image = image.astype(np.float32, copy=False)
         density = pd.read_csv(os.path.join(self.dataset_directory + self.map_directory_name, file_name[:-4] + '.csv'),
                               sep=',', header=None).values
         density = density.astype(np.float32, copy=False)
+        h = density.shape[0]
+        w = density.shape[1]
+        density = cv2.resize(density, (int(np.ceil(w*scale/8.0)*8), int(np.ceil(h*scale/8.0)*8)), interpolation=cv2.INTER_CUBIC)
+        density = density * ((w * h) / (int(np.ceil(w*scale/8.0)*8) * int(np.ceil(h*scale/8.0)*8)))     
         label = density
+        image = np.transpose(image, (2, 0, 1))
+        # density = np.transpose(density, (2, 0, 1))
+        print('image', image.shape)
+        print('density', density.shape)
         return image, label, density
 
     def __len__(self):
@@ -72,10 +84,11 @@ class ClusteredOrangeTransformedDataset(Dataset):
         else:
             examples_end = examples_start + number_of_examples
         self.dataset_directory = os.path.join(ClusteredOrangePreprocessor().database_directory, dataset)
-        file_names = os.listdir(self.dataset_directory + map_directory_name)
+        print('dataset_directory', self.dataset_directory)
+        file_names = os.listdir(self.dataset_directory) # + map_directory_name)
         random.shuffle(file_names)
-        print('file_names', len(file_names))
-        self.file_names = [name for name in file_names if name.endswith('.csv')][examples_start:examples_end]
+        # self.file_names = [name for name in file_names if name.endswith('.csv')][examples_start:examples_end]
+        self.file_names = [name for name in file_names if name.endswith('.jpg')][examples_start:examples_end]
         self.image_patch_size = image_patch_size
         self.label_patch_size = label_patch_size
         half_patch_size = int(self.image_patch_size // 2)
@@ -101,6 +114,7 @@ class ClusteredOrangeTransformedDataset(Dataset):
         :return: An example and label from the crowd dataset.
         :rtype: torch.Tensor, torch.Tensor
         """
+        scale = 0.8
         index_ = random.randrange(self.length)
         file_name_index = np.searchsorted(self.start_indexes, index_, side='right') - 1
         file_name = self.file_names[file_name_index]
@@ -112,13 +126,20 @@ class ClusteredOrangeTransformedDataset(Dataset):
                                                                NumpyArraysToTorchTensors()])
         image = Image.open(os.path.join(self.dataset_directory, file_name[:-4] + '.jpg')).convert('RGB')
         image = np.array(image)
+        image = cv2.resize(image, (int(np.ceil(image.shape[1]*scale/8.0)*8), int(np.ceil(image.shape[0]*scale/8.0)*8)), interpolation=cv2.INTER_CUBIC)
         density = pd.read_csv(os.path.join(self.dataset_directory + self.map_directory_name, file_name[:-4]+'.csv'), sep=',', header=None).values
         density = density.astype(np.float32, copy=False)
+        h = density.shape[0]
+        w = density.shape[1]
+        density = cv2.resize(density, (int(np.ceil(w*scale/8.0)*8), int(np.ceil(h*scale/8.0)*8)), interpolation=cv2.INTER_CUBIC)
+        density = density * ((w * h) / (int(np.ceil(w*scale/8.0)*8) * int(np.ceil(h*scale/8.0)*8)))
         label = density
         half_patch_size = int(self.image_patch_size // 2)
         y_positions = range(half_patch_size, image.shape[0] - half_patch_size + 1)
         x_positions = range(half_patch_size, image.shape[1] - half_patch_size + 1)
         positions_shape = [len(y_positions), len(x_positions)]
+        print('position_index', position_index)
+        print('positions_shape', positions_shape)
         y_index, x_index = np.unravel_index(position_index, positions_shape)
         y = y_positions[y_index]
         x = x_positions[x_index]
@@ -131,6 +152,12 @@ class ClusteredOrangeTransformedDataset(Dataset):
         example = preprocess_transform(example)
         map_ = example.map
 
+        # visualization
+        from utility import visualize
+        print('image', image.shape)
+        print('density', density.shape)
+        visualize(image, density)
+
         return example.image, example.label, map_
 
     def __len__(self):
@@ -141,7 +168,7 @@ class ClusteredOrangePreprocessor(DatabasePreprocessor):
     """The preprocessor for the ClusteredOrange dataset."""
     def __init__(self):
         super().__init__()
-        self.database_name = 'datasets/colorization/experimentset'   # ======  debugset
+        self.database_name = '/home/xiaocmai/scratch/datasets/colorization/debugset'   # ======  experimentset, debugset
         # self.database_url = 'http://crcv.ucf.edu/data/ucf-qnrf/UCF-QNRF_ECCV18.zip'
         self.database_archived_directory_name = 'xxxx'
 

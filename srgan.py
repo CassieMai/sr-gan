@@ -67,8 +67,8 @@ class Experiment(ABC):
                 self.settings.load_model_path = self.trial_directory
             elif not os.path.exists(self.trial_directory):
                 self.settings.continue_existing_experiments = False
-        self.trial_directory = '092801'
-        print(self.trial_directory)
+        self.trial_directory = 'srganExperiment'
+        print('save model dir: ', self.trial_directory)
         os.makedirs(os.path.join(self.trial_directory, self.settings.temporary_directory), exist_ok=True)
         self.prepare_summary_writers()
         seed_all(0)
@@ -106,6 +106,7 @@ class Experiment(ABC):
             print('step=', step)
             self.adjust_learning_rate(step)
             # DNN.
+            print('train_dataset_generator', train_dataset_generator)
             samples = next(train_dataset_generator)
             if len(samples) == 2:
                 labeled_examples, labels = samples
@@ -114,11 +115,14 @@ class Experiment(ABC):
                 labeled_examples, primary_labels, secondary_labels = samples
                 labeled_examples, labels = labeled_examples.to(gpu), (primary_labels.to(gpu), secondary_labels.to(gpu))
             self.dnn_training_step(labeled_examples, labels, step)
+            print('labeled_examples', len(labeled_examples))
+            print('labeled_examples', labeled_examples[0].shape)
             print('dnn_training_step')
 
             # GAN.
             unlabeled_examples = next(unlabeled_dataset_generator)[0]
             unlabeled_examples = unlabeled_examples.to(gpu)
+            print('unlabeled_examples ', len(unlabeled_examples))
             self.gan_training_step(labeled_examples, labels, unlabeled_examples, step)
             print('gan_training_step')
 
@@ -127,6 +131,7 @@ class Experiment(ABC):
                 step_time_start = datetime.datetime.now()
                 self.eval_mode()
                 with torch.no_grad():
+                    print('validation summaries: ')
                     self.validation_summaries(step)
                 self.train_mode()
 
@@ -449,6 +454,7 @@ class Experiment(ABC):
     def infinite_iter(dataset):
         """Create an infinite generator from a dataset"""
         while True:
+            print(len(dataset))
             for examples in dataset:
                 yield examples
 
